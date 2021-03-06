@@ -1,0 +1,19 @@
+zero = { "0" }
+
+true_ty = { "true" }
+false_ty = { "false" }
+
+if_expr = { "if" ~ term ~ "then" ~ term ~ "else" ~ term}
+
+pred = { "pred" ~ "("? ~ term ~ ")"? }
+succ = { "succ" ~ "("? ~ term ~ ")"?  }
+iszero = { "iszero" ~ "("? ~ term ~ ")"? }
+
+term = _{ true_ty | false_ty | if_expr | zero | pred | succ | iszero }
+
+WHITESPACE = _{ " " }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+
+stmt = { term ~ ";" }
+
+program = _{ SOI ~ "\n"* ~ (stmt ~ "\n"+)* ~ stmt? ~ EOI }
