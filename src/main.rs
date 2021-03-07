@@ -16,5 +16,7 @@ fn main() {
     let input = fs::read_to_string(args.src)
                             .expect("Failed to read the file.");
     let stmts = parser::parse(input.as_str()).expect("Parse faied.");
-    print!("{:#?}", stmts);
+    for stmt in stmts {
+        println!("{}", eval::evaluate(stmt.0.as_ref()));
+    }
 }

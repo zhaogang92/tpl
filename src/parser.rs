@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use pest::{Parser, Span};
 use pest::error::Error;
 use pest::iterators::Pair;
@@ -7,13 +8,13 @@ use pest_derive::*;
 #[grammar = "lambda.pest"]
 struct LambdaParser;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Position {
     index: usize,   // byte pos
     line_col: (usize, usize)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TokenInfo(Position, Position);
 
 
@@ -28,8 +29,33 @@ pub enum Term {
     Succ(TokenInfo, Box<Term>),
 }
 
+impl Display for Term {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Term::True(_) => write!(f, "true"),
+            Term::False(_) => write!(f, "false"),
+            Term::Zero(_) => write!(f, "0"),
+            Term::Succ(_, val) => {
+                let mut current_t = val.as_ref();
+                let mut num_val = 1;
+                loop {
+                    match current_t {
+                        Term::Zero(_) => return write!(f, "{}", num_val),
+                        Term::Succ(_, s) => {
+                            num_val += 1;
+                            current_t = s.as_ref();
+                        }
+                        _ => return write!(f, "{:?}", current_t)
+                    }
+                }
+            },
+            _ => write!(f, "{:?}", self)
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct Statement(Box<Term>);
+pub struct Statement(pub Box<Term>);
 
 pub fn parse(input: &str) -> Result<Vec<Statement>, Error<Rule>> {
     let mut res = Vec::new();
