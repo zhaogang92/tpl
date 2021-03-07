@@ -3,6 +3,7 @@ use std::fs;
 use clap::Clap;
 
 mod parser;
+mod eval;
 
 #[derive(Clap)]
 #[clap(version = "0.1")]

@@ -1,4 +1,4 @@
-use pest::Parser;
+use pest::{Parser, Span};
 use pest::error::Error;
 use pest::iterators::Pair;
 use pest_derive::*;
@@ -7,16 +7,25 @@ use pest_derive::*;
 #[grammar = "lambda.pest"]
 struct LambdaParser;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position {
+    index: usize,   // byte pos
+    line_col: (usize, usize)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenInfo(Position, Position);
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Term {
-    True,
-    False,
-    Zero,
-    If(Box<Term>, Box<Term>, Box<Term>),
-    IsZero(Box<Term>),
-    Pred(Box<Term>),
-    Succ(Box<Term>),
+    True(TokenInfo),
+    False(TokenInfo),
+    Zero(TokenInfo),
+    If(TokenInfo, Box<Term>, Box<Term>, Box<Term>),
+    IsZero(TokenInfo, Box<Term>),
+    Pred(TokenInfo, Box<Term>),
+    Succ(TokenInfo, Box<Term>),
 }
 
 #[derive(Debug)]
@@ -39,36 +48,49 @@ pub fn parse(input: &str) -> Result<Vec<Statement>, Error<Rule>> {
 }
 
 fn parse_term(pair: Pair<Rule>) -> Term {
+    let token_info = get_token_info(pair.as_span());
     match pair.as_rule() {
-        Rule::true_ty => Term::True,
-        Rule::false_ty => Term::False,
-        Rule::zero => Term::Zero,
+        Rule::true_ty => Term::True(token_info),
+        Rule::false_ty => Term::False(token_info),
+        Rule::zero => Term::Zero(token_info),
         Rule::if_expr => {
             let mut it = pair.into_inner();
             let cond = parse_term(it.next().unwrap());
             let body = parse_term(it.next().unwrap());
             let alt = parse_term(it.next().unwrap());
-            Term::If(Box::new(cond), Box::new(body), Box::new(alt))
+            Term::If(token_info, Box::new(cond), Box::new(body), Box::new(alt))
         }
         Rule::succ => {
             let mut it = pair.into_inner();
             let val = parse_term(it.next().unwrap());
-            Term::Succ(Box::new(val))
+            Term::Succ(token_info, Box::new(val))
         }
         Rule::pred => {
             let mut it = pair.into_inner();
             let val = parse_term(it.next().unwrap());
-            Term::Pred(Box::new(val))
+            Term::Pred(token_info, Box::new(val))
         }
         Rule::iszero => {
             let mut it = pair.into_inner();
             let val = parse_term(it.next().unwrap());
-            Term::IsZero(Box::new(val))
+            Term::IsZero(token_info, Box::new(val))
         }
         _ => panic!("Unexpected term: {}", pair.as_str())
     }
 }
 
+fn get_token_info(span: Span) -> TokenInfo {
+    TokenInfo(
+        Position {
+            index: span.start(),
+            line_col: span.start_pos().line_col()
+        },
+        Position {
+            index: span.end(),
+            line_col: span.end_pos().line_col()
+        }
+    )
+}
 
 #[cfg(test)]
 mod tests {
