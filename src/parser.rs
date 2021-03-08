@@ -1,5 +1,5 @@
-use std::fmt::Display;
-use pest::{Parser, Span};
+use std::{collections::VecDeque, fmt::Display};
+use pest::{Parser, Span, Token};
 use pest::error::Error;
 use pest::iterators::Pair;
 use pest_derive::*;
@@ -20,44 +20,27 @@ pub struct TokenInfo(Position, Position);
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Term {
-    True(TokenInfo),
-    False(TokenInfo),
-    Zero(TokenInfo),
-    If(TokenInfo, Box<Term>, Box<Term>, Box<Term>),
-    IsZero(TokenInfo, Box<Term>),
-    Pred(TokenInfo, Box<Term>),
-    Succ(TokenInfo, Box<Term>),
-}
-
-impl Display for Term {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Term::True(_) => write!(f, "true"),
-            Term::False(_) => write!(f, "false"),
-            Term::Zero(_) => write!(f, "0"),
-            Term::Succ(_, val) => {
-                let mut current_t = val.as_ref();
-                let mut num_val = 1;
-                loop {
-                    match current_t {
-                        Term::Zero(_) => return write!(f, "{}", num_val),
-                        Term::Succ(_, s) => {
-                            num_val += 1;
-                            current_t = s.as_ref();
-                        }
-                        _ => return write!(f, "{:?}", current_t)
-                    }
-                }
-            },
-            _ => write!(f, "{:?}", self)
-        }
-    }
+    Var(TokenInfo, usize, usize),
+    App(TokenInfo, Box<Term>, Box<Term>),
+    Abst(TokenInfo, String, Box<Term>)
 }
 
 #[derive(Debug)]
 pub struct Statement(pub Box<Term>);
 
-pub fn parse(input: &str) -> Result<Vec<Statement>, Error<Rule>> {
+#[derive(Debug, Clone)]
+pub struct Bind();
+
+#[derive(Debug, Clone)]
+pub struct VarContext(String, Bind);
+
+pub type Context = VecDeque<VarContext>;
+
+pub fn init_context() -> Context {
+    VecDeque::default()
+}
+
+pub fn parse(input: &str, ctx: &mut Context) -> Result<Vec<Statement>, Error<Rule>> {
     let mut res = Vec::new();
     let pairs = LambdaParser::parse(Rule::program, input)?;
     for pair in pairs {
@@ -65,7 +48,7 @@ pub fn parse(input: &str) -> Result<Vec<Statement>, Error<Rule>> {
             Rule::stmt => {
                 let mut pair = pair.into_inner();
                 let term = pair.next().unwrap();
-                res.push(Statement(Box::new(parse_term(term))))
+                res.push(Statement(Box::new(parse_term(term, ctx))))
             }
             _ => {}
         }
@@ -73,33 +56,33 @@ pub fn parse(input: &str) -> Result<Vec<Statement>, Error<Rule>> {
     Ok(res)
 }
 
-fn parse_term(pair: Pair<Rule>) -> Term {
+fn parse_term(pair: Pair<Rule>, ctx: &mut Context) -> Term {
     let token_info = get_token_info(pair.as_span());
     match pair.as_rule() {
-        Rule::true_ty => Term::True(token_info),
-        Rule::false_ty => Term::False(token_info),
-        Rule::zero => Term::Zero(token_info),
-        Rule::if_expr => {
-            let mut it = pair.into_inner();
-            let cond = parse_term(it.next().unwrap());
-            let body = parse_term(it.next().unwrap());
-            let alt = parse_term(it.next().unwrap());
-            Term::If(token_info, Box::new(cond), Box::new(body), Box::new(alt))
+        Rule::var =>  {
+            let var = pair.as_str();
+            let var_index = name2index(ctx, var);
+            Term::Var(token_info, var_index, ctx.len())
         }
-        Rule::succ => {
-            let mut it = pair.into_inner();
-            let val = parse_term(it.next().unwrap());
-            Term::Succ(token_info, Box::new(val))
+        Rule::app => {
+            let mut pair = pair.into_inner();
+            let t1 = parse_term(pair.next().unwrap(), ctx);
+            let t2 = parse_term(pair.next().unwrap(), ctx);
+            Term::App(
+                token_info,
+                Box::new(t1),
+                Box::new(t2)
+            ) 
         }
-        Rule::pred => {
-            let mut it = pair.into_inner();
-            let val = parse_term(it.next().unwrap());
-            Term::Pred(token_info, Box::new(val))
-        }
-        Rule::iszero => {
-            let mut it = pair.into_inner();
-            let val = parse_term(it.next().unwrap());
-            Term::IsZero(token_info, Box::new(val))
+        Rule::abst => {
+            let mut pair = pair.into_inner();
+            let var = pair.next().unwrap();
+            add_bind(ctx, var.as_str());
+            let body = parse_term(pair.next().unwrap(), ctx);
+            Term::Abst(token_info,
+                var.as_str().to_string(),
+                Box::new(body)
+            )
         }
         _ => panic!("Unexpected term: {}", pair.as_str())
     }
@@ -118,27 +101,41 @@ fn get_token_info(span: Span) -> TokenInfo {
     )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn name2index(ctx: &mut Context, x: &str) -> usize {
+    for (idx, v) in ctx.iter().enumerate() {
+        if v.0 == x {
+            return idx;
+        }
+    }
+    add_bind(ctx, x)    // probably outer var
+}
 
-    #[test]
-    fn test_parse() {
-        let input = r"
-            /* Examples for testing */
+fn add_bind(ctx: &mut Context, x: &str) -> usize {
+    let bind = VarContext(x.to_string(), Bind());
+    ctx.push_front(bind);
+    0
+}
 
-            true;
-            if false then true else false; 
+fn pick_fresh_name(ctx: &mut Context, var: &str) -> String {
+    unimplemented!()
+}
 
-            0; 
-            succ (pred 0);
-            iszero (pred (succ (succ 0))); 
-
-
-            /* if 0 then 1 else pred 1; */
-            if iszero (pred (succ 0)) then succ 0 else pred (succ 0); 
-        ";
-        let res = parse(input).unwrap();
-        println!("{:#?}", res);
+pub fn print_term(t: &Term, ctx: &VecDeque<VarContext>) {
+    match t {
+        Term::Var(_, idx, _) => {
+            // let name = ctx.get(*idx).unwrap().0.as_str();
+            print!("{}", idx);
+        }
+        Term::Abst(_, var, body) => {
+            print!("lambda {}. ", var);
+            print_term(body, ctx);
+        }
+        Term::App(_, f, arg) => {
+            print!("(");
+            print_term(f, ctx);
+            print!(") (");
+            print_term(arg, ctx);
+            print!(")");
+        }
     }
 }

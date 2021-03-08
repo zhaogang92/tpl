@@ -1,19 +1,17 @@
-zero = { "0" }
+var = {
+    ASCII_ALPHA+
+}
 
-true_ty = { "true" }
-false_ty = { "false" }
+abst = { "lambda" ~ var ~ "." ~ term }
 
-if_expr = { "if" ~ term ~ "then" ~ term ~ "else" ~ term}
+app = { "(" ~ term ~ ")" ~ "("? ~ term ~ ")"? }
 
-pred = { "pred" ~ "("? ~ term ~ ")"? }
-succ = { "succ" ~ "("? ~ term ~ ")"?  }
-iszero = { "iszero" ~ "("? ~ term ~ ")"? }
-
-term = _{ true_ty | false_ty | if_expr | zero | pred | succ | iszero }
-
-WHITESPACE = _{ " " }
-COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+term = _{ abst | app | var}
 
 stmt = { term ~ ";" }
 
-program = _{ SOI ~ "\n"* ~ (stmt ~ "\n"+)* ~ stmt? ~ EOI }
+program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE+)* ~ stmt? ~ EOI }
+
+
+WHITESPACE = _{ " " }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
