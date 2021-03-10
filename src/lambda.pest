@@ -1,10 +1,12 @@
-var = {
+var = @{
     ASCII_ALPHA+
 }
 
-abst = { "lambda" ~ var ~ "." ~ term }
+abst = { "lambda" ~ var ~ "." ~ ( term | "(" ~ term ~ ")") }
 
-app = { "(" ~ term ~ ")" ~ "("? ~ term ~ ")"? }
+app_template = _{ var | "(" ~ term ~ ")" }
+
+app = { app_template ~ ( term | "(" ~ term ~ ")") }
 
 term = _{ abst | app | var}
 

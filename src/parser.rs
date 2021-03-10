@@ -1,5 +1,5 @@
-use std::{collections::VecDeque, fmt::Display};
-use pest::{Parser, Span, Token};
+use std::{collections::VecDeque, usize};
+use pest::{Parser, Span};
 use pest::error::Error;
 use pest::iterators::Pair;
 use pest_derive::*;
@@ -20,7 +20,7 @@ pub struct TokenInfo(Position, Position);
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Term {
-    Var(TokenInfo, usize, usize),
+    Var(TokenInfo, i32, i32),
     App(TokenInfo, Box<Term>, Box<Term>),
     Abst(TokenInfo, String, Box<Term>)
 }
@@ -62,11 +62,11 @@ fn parse_term(pair: Pair<Rule>, ctx: &mut Context) -> Term {
         Rule::var =>  {
             let var = pair.as_str();
             let var_index = name2index(ctx, var);
-            Term::Var(token_info, var_index, ctx.len())
+            Term::Var(token_info, var_index, ctx.len() as i32)
         }
         Rule::app => {
             let mut pair = pair.into_inner();
-            let t1 = parse_term(pair.next().unwrap(), ctx);
+            let t1 = parse_app_template(pair.next().unwrap(), ctx);
             let t2 = parse_term(pair.next().unwrap(), ctx);
             Term::App(
                 token_info,
@@ -79,12 +79,27 @@ fn parse_term(pair: Pair<Rule>, ctx: &mut Context) -> Term {
             let var = pair.next().unwrap();
             add_bind(ctx, var.as_str());
             let body = parse_term(pair.next().unwrap(), ctx);
+            pop_bind(ctx);
             Term::Abst(token_info,
                 var.as_str().to_string(),
                 Box::new(body)
             )
         }
         _ => panic!("Unexpected term: {}", pair.as_str())
+    }
+}
+
+fn parse_app_template(pair: Pair<Rule>, ctx: &mut Context) -> Term {
+    let token_info = get_token_info(pair.as_span());
+    match pair.as_rule() {
+        Rule::var => {
+            let var = pair.as_str();
+            let var_index = name2index(ctx, var);
+            Term::Var(token_info, var_index, ctx.len() as i32)
+        }
+        _ => {
+            parse_term(pair, ctx)
+        }
     }
 }
 
@@ -101,34 +116,52 @@ fn get_token_info(span: Span) -> TokenInfo {
     )
 }
 
-fn name2index(ctx: &mut Context, x: &str) -> usize {
+fn name2index(ctx: &mut Context, x: &str) -> i32 {
     for (idx, v) in ctx.iter().enumerate() {
         if v.0 == x {
-            return idx;
+            return idx as i32;
         }
     }
-    add_bind(ctx, x)    // probably outer var
+    add_bind(ctx, x)    // probably outer var, and they will stay there forever
 }
 
-fn add_bind(ctx: &mut Context, x: &str) -> usize {
+fn index2name(ctx: &mut Context, x: i32) -> &str {
+    let item = ctx.get(x as usize).unwrap();
+    item.0.as_ref()
+}
+
+fn add_bind(ctx: &mut Context, x: &str) -> i32 {
     let bind = VarContext(x.to_string(), Bind());
     ctx.push_front(bind);
     0
 }
 
-fn pick_fresh_name(ctx: &mut Context, var: &str) -> String {
-    unimplemented!()
+/// After a lambda ends, pop its bind
+fn pop_bind(ctx: &mut Context) {
+    ctx.pop_front();
 }
 
-pub fn print_term(t: &Term, ctx: &VecDeque<VarContext>) {
+fn pick_fresh_name(ctx: &mut Context, var: &str) -> String {
+    for VarContext(x, _) in ctx.iter() {
+        if x == var {
+            return pick_fresh_name(ctx, format!("{}'", var).as_str());
+        }
+    }
+    add_bind(ctx, var);
+    var.to_string()
+}
+
+pub fn print_term(t: &Term, ctx: &mut Context) {
     match t {
         Term::Var(_, idx, _) => {
-            // let name = ctx.get(*idx).unwrap().0.as_str();
-            print!("{}", idx);
+            let x = index2name(ctx, *idx);
+            print!("{}", x);
         }
         Term::Abst(_, var, body) => {
-            print!("lambda {}. ", var);
+            let name = pick_fresh_name(ctx, var);
+            print!("lambda {}. ", name);
             print_term(body, ctx);
+            pop_bind(ctx);
         }
         Term::App(_, f, arg) => {
             print!("(");
