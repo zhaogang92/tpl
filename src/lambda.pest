@@ -2,18 +2,36 @@ var = @{
     ASCII_ALPHA+
 }
 
-abst = { "lambda" ~ var ~ "." ~ ( term | "(" ~ term ~ ")") }
+TRUE = { "true" }
+FALSE = { "false" }
+ZERO = { "0" }
+
+wrap_term = _{ term | "(" ~ term ~ ")" }
+
+pred = { "pred" ~ wrap_term }
+succ = { "succ" ~ wrap_term }
+iszero = { "iszero" ~ wrap_term }
+
+basic_ty = { "Bool" }
+
+lambda_ty = { basic_ty ~ "->" ~ basic_ty }
+
+ty = _{ lambda_ty | basic_ty}
+
+if_expr = { "if" ~ term ~ "then" ~ term ~ "else" ~ term }
+
+abst = { "lambda" ~ var ~ ":" ~ ty ~ "." ~ wrap_term }
 
 app_template = _{ var | "(" ~ term ~ ")" }
 
-app = { app_template ~ ( term | "(" ~ term ~ ")") }
+app = { app_template ~ wrap_term }
 
-term = _{ abst | app | var}
+term = _{ TRUE | FALSE | ZERO | iszero | pred | succ | abst | app | var}
 
 stmt = { term ~ ";" }
 
-program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE+)* ~ stmt? ~ EOI }
+program = _{ SOI ~ stmt+ ~ EOI }
 
 
-WHITESPACE = _{ " " }
+WHITESPACE = _{ " " | "\t" | NEWLINE }
 COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

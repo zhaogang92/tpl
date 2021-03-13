@@ -1,11 +1,10 @@
 #[allow(unused)]
 use std::fs;
 use clap::Clap;
-use parser::print_term;
-use eval::eval;
 
 mod parser;
 mod eval;
+mod ts;
 
 #[derive(Clap)]
 #[clap(version = "0.1")]
@@ -20,8 +19,8 @@ fn main() {
     let mut ctx = parser::init_context();
     let stmts = parser::parse(input.as_str(), &mut ctx).expect("Parse faied.");
     for stmt in stmts.iter() {
-        let tt = eval(&mut ctx, stmt.0.as_ref());
-        parser::print_term(&tt, &mut ctx);
+        // let tt = eval(&mut ctx, stmt.0.as_ref());
+        parser::print_term(&stmt.0, &mut ctx);
         // parser::print_term(stmt.0.as_ref(), &mut ctx);
         println!(";");
     }
