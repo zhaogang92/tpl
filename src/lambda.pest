@@ -1,5 +1,10 @@
+KEYWORDS = _{
+    "if" | "then" | "else" | "lambda" | "Bool" | "true" | "false"
+}
+
 var = @{
-    ASCII_ALPHA+
+    !(KEYWORDS)
+    ~ ASCII_ALPHA+
 }
 
 TRUE = { "true" }
@@ -26,7 +31,7 @@ app_template = _{ var | "(" ~ term ~ ")" }
 
 app = { app_template ~ wrap_term }
 
-term = _{ TRUE | FALSE | ZERO | iszero | pred | succ | abst | app | var}
+term = _{ TRUE | FALSE | ZERO | iszero | pred | succ | if_expr | abst | app | var}
 
 stmt = { term ~ ";" }
 

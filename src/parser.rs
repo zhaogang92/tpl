@@ -59,7 +59,7 @@ pub enum Bind {
 }
 
 #[derive(Debug, Clone)]
-pub struct VarContext(String, Bind);
+pub struct VarContext(pub String, pub Bind);
 
 pub type Context = VecDeque<VarContext>;
 
@@ -192,12 +192,12 @@ fn name2index(ctx: &mut Context, x: &str) -> i32 {
     add_bind(ctx, x, Bind::NameBind)    // probably outer var, and they will stay there forever
 }
 
-fn index2name(ctx: &mut Context, x: i32) -> &str {
+pub fn index2name(ctx: &mut Context, x: i32) -> &str {
     let item = ctx.get(x as usize).unwrap();
     item.0.as_ref()
 }
 
-fn add_bind(ctx: &mut Context, x: &str, b: Bind) -> i32 {
+pub fn add_bind(ctx: &mut Context, x: &str, b: Bind) -> i32 {
     let bind = VarContext(x.to_string(), b);
     ctx.push_front(bind);
     0
@@ -220,6 +220,8 @@ fn pick_fresh_name(ctx: &mut Context, var: &str) -> String {
 
 pub fn print_term(t: &Term, ctx: &mut Context) {
     match t {
+        Term::True(_) => print!("true"),
+        Term::False(_) => print!("false"),
         Term::Var(_, idx, _) => {
             let x = index2name(ctx, *idx);
             print!("{}", x);
@@ -236,6 +238,14 @@ pub fn print_term(t: &Term, ctx: &mut Context) {
             print!(") (");
             print_term(arg, ctx);
             print!(")");
+        }
+        Term::If(_, cond, body, alt) => {
+            print!("if ");
+            print_term(cond, ctx);
+            print!(" then ");
+            print_term(body, ctx);
+            print!(" else ");
+            print_term(alt, ctx);
         }
         _ => unimplemented!(),
     }

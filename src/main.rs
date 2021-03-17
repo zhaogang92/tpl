@@ -1,3 +1,4 @@
+use std::any::type_name;
 #[allow(unused)]
 use std::fs;
 use clap::Clap;
@@ -19,9 +20,11 @@ fn main() {
     let mut ctx = parser::init_context();
     let stmts = parser::parse(input.as_str(), &mut ctx).expect("Parse faied.");
     for stmt in stmts.iter() {
-        // let tt = eval(&mut ctx, stmt.0.as_ref());
-        parser::print_term(&stmt.0, &mut ctx);
-        // parser::print_term(stmt.0.as_ref(), &mut ctx);
-        println!(";");
+        let val = eval::eval(&mut ctx, stmt.0.as_ref());
+        let ty = ts::type_of(stmt.0.as_ref(), &mut ctx);
+        // parser::print_term(&stmt.0, &mut ctx);
+        parser::print_term(&val, &mut ctx);
+        print!(": ");
+        println!("{:}", ty);
     }
 }
