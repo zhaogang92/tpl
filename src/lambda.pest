@@ -1,19 +1,26 @@
-var = @{
-    ASCII_ALPHA+
+KEYWORDS = {
+    "lambda"
 }
 
-abst = { "lambda" ~ var ~ "." ~ ( term | "(" ~ term ~ ")") }
+var = @{
+    !KEYWORDS
+    ~ ASCII_ALPHA+
+}
+
+wrap_term = _{ term | "(" ~ term ~ ")" }
+
+abst = { "lambda" ~ var ~ "." ~ wrap_term }
 
 app_template = _{ var | "(" ~ term ~ ")" }
 
-app = { app_template ~ ( term | "(" ~ term ~ ")") }
+app = { app_template ~ wrap_term }
 
 term = _{ abst | app | var}
 
 stmt = { term ~ ";" }
 
-program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE+)* ~ stmt? ~ EOI }
+program = _{ SOI ~ stmt* ~ EOI }
 
 
-WHITESPACE = _{ " " }
+WHITESPACE = _{ " " | "\t" | NEWLINE }
 COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
