@@ -35,7 +35,7 @@ fn subst(j: i32, s: &Term, t: &Term) -> Term {
         match t {
             &Term::Var(info, k, l) => {
                 if k == j + c {
-                    walk(c, j, s, s)
+                    shift(c, s)
                 } else {
                     Term::Var(info, k, l)
                 }
