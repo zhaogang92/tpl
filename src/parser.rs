@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, fmt::{Display, Formatter}, usize};
+use std::{collections::{HashMap, VecDeque}, fmt::{Display, Formatter}, usize};
 use pest::{Parser, Span};
 use pest::error::Error;
 use pest::iterators::Pair;
@@ -29,7 +29,9 @@ pub enum Term {
     If(TokenInfo, Box<Term>, Box<Term>, Box<Term>),
     Var(TokenInfo, i32, i32),
     App(TokenInfo, Box<Term>, Box<Term>),
-    Abst(TokenInfo, String, Type, Box<Term>)
+    Abst(TokenInfo, String, Type, Box<Term>),
+    Proj(TokenInfo, Box<Term>, String),
+    Record(TokenInfo, HashMap<String, Box<Term>>)
 }
 
 #[derive(Debug)]
@@ -38,7 +40,9 @@ pub struct Statement(pub Box<Term>);
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     TyBool,
-    TyArr(Box<Type>, Box<Type>)
+    TyArr(Box<Type>, Box<Type>),
+    TyTop,
+    TyRecord(HashMap<String, Box<Type>>)
 }
 
 impl Display for Type {
@@ -47,6 +51,14 @@ impl Display for Type {
             Type::TyBool => write!(f, "Bool"),
             Type::TyArr(ty1, ty2) => {
                 write!(f, "{}->{}", ty1, ty2)
+            },
+            Type::TyTop => write!(f, "Top"),
+            Type::TyRecord(elements) => {
+                write!(f, "{{").unwrap();
+                for (name, box ty) in elements {
+                    write!(f, "{}: {},", name, ty).unwrap();
+                }
+                write!(f, "}}")
             }
         } 
     }
@@ -104,6 +116,17 @@ fn parse_term(pair: Pair<Rule>, ctx: &mut Context) -> Term {
             let t = parse_term(pair.next().unwrap(), ctx);
             Term::Succ(token_info, Box::new(t))
         }
+        Rule::proj => {
+            let mut pair = pair.into_inner();
+            let record_p = pair.next().unwrap();
+            let index = pair.next().unwrap().as_str();
+            let record = parse_term(record_p, ctx);
+            Term::Proj(token_info, Box::new(record), index.to_string()) 
+        }
+        Rule::record => {
+            let map = parse_record(pair, ctx);
+            Term::Record(token_info, map)
+        }
         Rule::var =>  {
             let var = pair.as_str();
             let var_index = name2index(ctx, var);
@@ -143,6 +166,23 @@ fn parse_term(pair: Pair<Rule>, ctx: &mut Context) -> Term {
     }
 }
 
+fn parse_record_item(pair: Pair<Rule>, ctx: &mut Context) -> (String, Box<Term>) {
+    let mut pair = pair.into_inner();
+    let name = pair.next().unwrap().as_str();
+    let value = parse_term(pair.next().unwrap(), ctx);
+    (name.to_string(), Box::new(value))
+}
+
+fn parse_record(pair: Pair<Rule>, ctx: &mut Context) -> HashMap<String, Box<Term>> {
+    let mut pair = pair.into_inner();
+    let mut map = HashMap::new();
+    while let Some(p) = pair.next() {
+        let (name, val) = parse_record_item(p, ctx);
+        map.insert(name, val);
+    }
+    map
+}
+
 fn parse_app_template(pair: Pair<Rule>, ctx: &mut Context) -> Term {
     let token_info = get_token_info(pair.as_span());
     match pair.as_rule() {
@@ -159,12 +199,29 @@ fn parse_app_template(pair: Pair<Rule>, ctx: &mut Context) -> Term {
 
 fn parse_ty(pair: Pair<Rule>, ctx: &mut Context) -> Type {
     match pair.as_rule() {
-        Rule::basic_ty => Type::TyBool,
+        Rule::basic_ty => {
+            if pair.as_str() == "Bool" {
+                Type::TyBool
+            } else {
+                Type::TyTop
+            }
+        }
         Rule::lambda_ty => {
             let mut pair = pair.into_inner();
             let arg_ty = parse_ty(pair.next().unwrap(), ctx);
             let ret_ty = parse_ty(pair.next().unwrap(), ctx);
             Type::TyArr(Box::new(arg_ty), Box::new(ret_ty))
+        }
+        Rule::record_ty => {
+            let mut pair = pair.into_inner();
+            let mut map = HashMap::new();
+            while let Some(p) = pair.next() {
+                let mut item = p.into_inner();
+                let name = item.next().unwrap().as_str();
+                let item_ty = parse_ty(item.next().unwrap(), ctx);
+                map.insert(name.to_string(), Box::new(item_ty));
+            }
+            Type::TyRecord(map)
         }
         _ => panic!("Not type token: {}", pair.as_str())
     }
@@ -246,6 +303,19 @@ pub fn print_term(t: &Term, ctx: &mut Context) {
             print_term(body, ctx);
             print!(" else ");
             print_term(alt, ctx);
+        }
+        Term::Record(_, map) => {
+            print!("{{");
+            for (name, box value) in map {
+                print!("{}=", name);
+                print_term(value, ctx);
+                print!(",");
+            }
+            print!("}}");
+        }
+        Term::Proj(_, box record, index) => {
+            print_term(record, ctx);
+            print!(".{}", index);
         }
         _ => unimplemented!(),
     }

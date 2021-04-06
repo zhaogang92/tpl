@@ -1,5 +1,5 @@
 KEYWORDS = _{
-    "if" | "then" | "else" | "lambda" | "Bool" | "true" | "false"
+    "if" | "then" | "else" | "lambda" | "Bool" | "true" | "false" | "Top"
 }
 
 var = @{
@@ -17,11 +17,19 @@ pred = { "pred" ~ wrap_term }
 succ = { "succ" ~ wrap_term }
 iszero = { "iszero" ~ wrap_term }
 
-basic_ty = { "Bool" }
+record_item = { var ~ "=" ~ term }
+record = { "{" ~ (record_item ~ ",")* ~ record_item ~ "}" }
+
+proj = { (record | var) ~ "." ~ var}
+
+basic_ty = { "Bool" | "Top" }
 
 lambda_ty = { basic_ty ~ "->" ~ basic_ty }
 
-ty = _{ lambda_ty | basic_ty}
+record_item_ty = { var ~ ":" ~ ty }
+record_ty = { "{" ~ (record_item_ty ~ ",")* ~ record_item_ty ~ "}" }
+
+ty = _{ lambda_ty | basic_ty | record_ty}
 
 if_expr = { "if" ~ term ~ "then" ~ term ~ "else" ~ term }
 
@@ -31,7 +39,7 @@ app_template = _{ var | "(" ~ term ~ ")" }
 
 app = { app_template ~ wrap_term }
 
-term = _{ TRUE | FALSE | ZERO | iszero | pred | succ | if_expr | abst | app | var}
+term = _{ TRUE | FALSE | ZERO | iszero | pred | succ | proj | record | if_expr | abst | app | var}
 
 stmt = { term ~ ";" }
 

@@ -1,4 +1,6 @@
-use crate::parser::{Context, print_term};
+use std::collections::HashMap;
+
+use crate::parser::{Context};
 use crate::parser::Term;
 
 
@@ -6,6 +8,14 @@ pub fn is_val(ctx: &Context, t: &Term) -> bool {
     match t {
         Term::Abst(_, _, _, _) => true,
         Term::True(_) | Term::False(_) => true,
+        Term::Record(_, records) => {
+            for (_, box item) in records {
+                if !is_val(ctx, item) {
+                    return false;
+                }
+            }
+            true
+        },
         _ => false,
     }
 }
@@ -34,6 +44,14 @@ fn shift(d: i32, t: &Term) -> Term {
                 )
             }
             Term::True(_) | Term::False(_) => t.clone(),
+            Term::Proj(info, box record, l) => {
+                Term::Proj(*info, Box::new(walk(c, d, record)), l.to_string())
+            }
+            Term::Record(info, records) => {
+                Term::Record(*info, records.iter().map(|(name, item)| {
+                    (name.to_string(), Box::new(walk(c, d, item)))
+                }).collect())
+            }
             _ => unimplemented!("Not handled: {:?}", t)
         }
     }
@@ -64,6 +82,14 @@ fn subst(j: i32, s: &Term, t: &Term) -> Term {
                 )
             }
             Term::True(_) | Term::False(_) => t.clone(),
+            Term::Proj(info, record, l) => {
+                Term::Proj(*info, Box::new(walk(c, j, s, record)), l.to_string())
+            }
+            Term::Record(info, record) => {
+                Term::Record(*info, record.iter().map(|(name, item)| {
+                    (name.to_string(), Box::new(walk(c, j, s, item)))
+                }).collect())
+            }
             _ => unimplemented!("Not handled: {:?}", t)
         }
     }
@@ -76,28 +102,46 @@ fn subst_top(s: &Term, t: &Term) -> Term {
 
 pub fn eval(ctx: &Context, t: &Term) -> Term {
     match t {
-        Term::App(info, t1, t2) => {
-            match t1.as_ref() {
-                Term::Abst(_, x,  _, t12) if is_val(ctx, t2) => {
-                    let res = subst_top(t2, t12);
-                    return eval(ctx, &res);
-                }
-                _ if is_val(ctx, t1) => {
-                    let t22 = eval(ctx, t2);
-                    return eval(ctx, &Term::App(*info, t1.clone(), Box::new(t22)));
-                }
-                _ => {
-                    let t12 = eval(ctx, t1);
-                    return eval(ctx, &Term::App(*info, Box::new(t12), t2.clone()));
-                }
-            }
+        Term::App(_, box Term::Abst(_,_,_, box t12), box t2) if is_val(ctx, t2) => {
+            let res = subst_top(t2, t12);
+            eval(ctx, &res)
         }
-        Term::If(_, cond, body, alt) => {
+        Term::App(info, box t1, box t2) if is_val(ctx, t1) => {
+            let t22 = eval(ctx, t2);
+            eval(ctx, &Term::App(*info, Box::new(t1.clone()), Box::new(t22)))
+        }
+        Term::App(info, box t1, box t2) => {
+            let t12 = eval(ctx, t1);
+            eval(ctx, &Term::App(*info, Box::new(t12), Box::new(t2.clone())))
+        }
+        Term::If(_, box cond, box body, box alt) => {
             let cond_val = eval(ctx, cond);
             match cond_val {
                 Term::True(_) => eval(ctx, body),
                 Term::False(_) => eval(ctx, alt),
                 _ => panic!("If condition must be evaluted to boolean: {:?}", cond_val)
+            }
+        }
+        Term::Record(info, records) => {
+            if records.is_empty() {
+                return t.clone()
+            }
+            let mut map = HashMap::new();
+            for (name, box item) in records {
+                if !is_val(ctx, item) {
+                    let result = eval(ctx, item);
+                    map.insert(name.to_string(), Box::new(result));
+                } else {
+                    map.insert(name.to_string(), Box::new(item.clone()));
+                }
+            }
+            Term::Record(*info, map)
+        }
+        Term::Proj(_, box Term::Record(_, map), index) => {
+            if let Some(box val) = map.get(index) {
+                eval(ctx, val)
+            } else {
+                panic!("Cannot find key {} in the record", index)
             }
         }
         _ => t.clone()
